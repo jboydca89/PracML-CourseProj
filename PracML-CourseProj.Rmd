@@ -1,0 +1,90 @@
+---
+title: "Predicting Barbell Lift Quality Using Accelerometer Measurements"
+author: "Jackson Boyd"
+date: "June 10, 2020"
+output: html_document
+---
+
+# Introduction
+
+The goal of this project is to accurately predict the manner in six male participants perform a dumbbell biceps curl. The *classe* variable is up for prediction, with the following possible outcomes:
+
+A: Exactly according to the Unilateral Dumbbell Biceps Curl specifications (the correct way)  
+B: Throwing the elbows to the front  
+C: Lifting the dumbbell only halfway  
+D: Lowering the dumbbell only halfway  
+E: Throwing the hips to the front
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r Imports, include = F}
+# Load packages
+library(tidyverse); library(caret)
+# Load data sets
+training <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv")
+validation <- read_csv("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv")
+```
+
+# Initial Setup
+
+Because I have such a large training set to work with, I turned the testing set into a validation set and split the training set into a training and testing set. This will allow me to validate my prediction models before applying them to the validation set.
+
+First I removed all variables without predictive value (X1, user_name, raw_timestamp_part_1, raw_timestamp_part_2, cvtd_timestamp, new_window, num_window) and all variables with greater than 50% NAs. This left me with 53 variables (including *classe*), each completely filled.
+
+```{r SelectVars, include = F}
+trainSmall <- training %>% select(-c(X1, user_name, raw_timestamp_part_1,
+                                     raw_timestamp_part_2, cvtd_timestamp,
+                                     new_window, num_window))
+valSmall <- validation %>% select(-c(X1, user_name, raw_timestamp_part_1,
+                                     raw_timestamp_part_2, cvtd_timestamp,
+                                     new_window, num_window))
+trainSmall <- trainSmall %>% select_if(~mean(is.na(.)) < .5)
+valSmall <- valSmall %>% select_if(~mean(is.na(.)) < .5)
+trainSmall <- trainSmall %>% mutate(classe = as.factor(classe))
+```
+
+```{r DataPart, include = F}
+set.seed(226109)
+inTrain <- createDataPartition(trainSmall$classe, p = 0.7, list = F)
+testSmall <- trainSmall[-inTrain,]
+trainSmall <- trainSmall[inTrain,]
+```
+
+# Model Selection
+
+Next I used a simple random forest algorithm to develop a prediction model because of its ability to predict categorical variables and high accuracy. I am not concerned with interpretability in this particular case, only with predictive accuracy. Had interpretability been a concern, I may have used a different type of regression model that allows more intuitive understanding.
+
+## Cross-validation
+
+Instead of using k-fold cross-validation, I am using a testing set of 30% size of the original training set to validate my model.
+
+```{r trainRF, cache = T, include = F}
+library(randomForest)
+set.seed(495660)
+modRF <- randomForest(classe ~ ., data = trainSmall)
+```
+
+# Testing Set Validation
+
+When I applied the testing data set to this model, it had accuracy >99%. Because the testing data set was not used to train the model, I would expect a similar accuracy / error rate for my validation set. Because the validation set is very small (only 20 observations), the most likely outcome is zero errors.
+
+```{r ConfusionMatrix, cache = T, echo = F, fig.cap = "Testing Set Confusion Matrix"}
+RFtestPred <- predict(modRF, newdata = testSmall)
+CM <- confusionMatrix(testSmall$classe, RFtestPred)
+CM$table
+```
+
+```{r RF_accuracy, include = F}
+CM$overall[1]
+```
+
+# Final Validation
+
+Here are the predictions when using the random forest model on the validation set:
+
+```{r, echo = F, fig.cap = "Validation Set Predictions"}
+RFValPred <- predict(modRF, newdata = valSmall)
+RFValPred
+```
